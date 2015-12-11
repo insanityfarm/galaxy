@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.6.3/jquery.min.js"></script>
+	<title>Galaxy Test</title>
+</head>
+<body>
+<div id="viewport"></div>
+<form>
+	<select id="starselect" onchange="changePos(stellars[this.value]);"></select>
+</form>
+<div id="stellarinfo" style="border: 1px solid #000000; width: 580px; margin: 5px 0 0 0; padding: 10px;">
+<strong>Name:</strong> Spiner<br><strong>Nearest Stellar:</strong> Vogt
+</div>
+<script src="js/Three.js" type="text/javascript"></script>
+<script src="js/tween.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+
+// set the scene size
+var WIDTH = 600,
+  HEIGHT = 450;
+
+// set some camera attributes
+var VIEW_ANGLE = 95,
+  ASPECT = WIDTH / HEIGHT,
+  NEAR = 0.1,
+  FAR = 10000;
+
+// get the DOM element to attach to
+// - assume we've got jQuery to hand
+var container = $('#viewport');
+
+// create a canvas renderer, camera
+// and a scene
+var renderer = new THREE.CanvasRenderer();
+var camera = new THREE.PerspectiveCamera(
+    VIEW_ANGLE,
+    ASPECT,
+    NEAR,
+    FAR
+);
+
+var scene = new THREE.Scene();
+
+// add the camera to the scene
+scene.add(camera);
+
+// start the renderer
+renderer.setSize(WIDTH, HEIGHT);
+renderer.setClearColorHex(0x000000, 0);
+
+// attach the render-supplied DOM element
+container.append(renderer.domElement);
+
+// set the background image
+var background = new Image();
+background.onload = function() {
+	$('#viewport > canvas').css('background-image', 'url('+background.src+')');
+}
+background.src = 'images/starfield.jpg';
+
+var spritedefinitions = [
+	{
+		image: 'images/star1.png',
+		innergrad: ['rgba(255,255,196,0.015)','rgba(255,255,255,0)'],
+		outergrad: ['rgba(255,255,255,0.02)','rgba(255,255,255,0)']
+	},
+	{
+		image: 'images/star2.png',
+		innergrad: ['rgba(255,0,0,0.02)','rgba(255,0,0,0)'],
+		outergrad: ['rgba(255,0,0,0.01)','rgba(255,0,0,0)']
+	},
+	{
+		image: 'images/star3.png',
+		innergrad: ['rgba(0,0,255,0.03)','rgba(64,64,255,0)'],
+		outergrad: ['rgba(192,192,255,0.03)','rgba(255,255,255,0)']
+	},
+	{
+		image: 'images/star4.png',
+		innergrad: ['rgba(24,24,24,0.03)','rgba(16,16,16,0)'],
+		outergrad: ['rgba(0,0,0,0.75)','rgba(0,0,0,0)']
+	},
+	{
+		image: 'images/star5.png',
+		innergrad: ['rgba(255,230,147,0.03)','rgba(255,230,147,0)'],
+		outergrad: ['rgba(255,255,255,0.03)','rgba(255,255,255,0)']
+	}
+];
+
+// set the master width and height to use for sprites (including gradients)
+var starradius = 500;
+// declare array to hold sprites
+var starsprite = [];
+
+// Load all the sprite materials to be used by the stars
+function initStarSprites(){
+	for(var i=0; i<spritedefinitions.length; i++){
+		starsprite[i] = {};
+		starsprite[i].canvas = document.createElement('canvas');
+		starsprite[i].context = starsprite[i].canvas.getContext('2d');
+		starsprite[i].canvas.width = starsprite[i].canvas.height = starradius*2;
+		starsprite[i].gradient = starsprite[i].context.createRadialGradient(starradius, starradius, 0, starradius, starradius, starradius);
+		starsprite[i].gradient.addColorStop(0, spritedefinitions[i].innergrad[0]);
+		starsprite[i].gradient.addColorStop(1, spritedefinitions[i].innergrad[1]);
+		starsprite[i].context.fillStyle = starsprite[i].gradient;
+		starsprite[i].context.fillRect(0,0,starradius * 2, starradius * 2);
+		starsprite[i].gradient = starsprite[i].context.createRadialGradient(starradius, starradius, 0, starradius, starradius, starradius/4);
+		starsprite[i].gradient.addColorStop(0, spritedefinitions[i].outergrad[0]);
+		starsprite[i].gradient.addColorStop(1, spritedefinitions[i].outergrad[1]);
+		starsprite[i].context.fillStyle = starsprite[i].gradient;
+		starsprite[i].context.fillRect(0,0,starradius * 2, starradius * 2);
+		starsprite[i].image = new Image();
+		starsprite[i].image.onload = function() {
+			starsprite[this.index].context.drawImage(
+				starsprite[this.index].image,
+				starradius-(starsprite[this.index].image.width/2),
+				starradius-(starsprite[this.index].image.height/2)
+			);
+		}
+		starsprite[i].image.index = i;
+		starsprite[i].image.src = spritedefinitions[i].image;
+	}
+}
+
+initStarSprites();
+
+function addStellar(starobj) { 
+	var material;
+	material = new THREE.ParticleBasicMaterial( {
+		map: new THREE.Texture(starsprite[starobj.spriteno].canvas)
+	});
+	starobj.threeobj = new THREE.Particle(material);
+	starobj.threeobj.position.x = starobj.x;
+	starobj.threeobj.position.y = starobj.y;
+	starobj.threeobj.position.z = starobj.z;
+	starobj.threeobj.scale.x = starobj.threeobj.scale.y = starobj.scale;
+	scene.add(starobj.threeobj);
+}
+
+// the camera starts at 0,0,0
+// so move it upwards
+camera.position.y = -3;
+
+var focalpoint = { x: -527, y: -3, z: 771, radius: 50 };
+var tween;
+
+function changePos(starto) {
+	tween = new TWEEN.Tween( { x: focalpoint.x, y: focalpoint.y, z: focalpoint.z, radius: focalpoint.radius, scale: focalpoint.radius/100 } )
+		.to( starto, 3000 )
+		.easing( TWEEN.Easing.Cubic.InOut )
+		.onUpdate( function () {
+			focalpoint = { x: this.x, y: this.y, z: this.z, radius: this.scale*100 };
+			camera.position.y = this.y;
+		})
+	.start();
+	$('#stellarinfo').html('<strong>Name:</strong> '+starto.name+'<br /><strong>Nearest Stellar:</strong> '+findNearestStellar(starto).name);
+}
+
+// draw!
+function animate(){
+	TWEEN.update();
+	window.requestAnimationFrame(animate);
+	// Move the camera in a circle with the pivot point in the centre of this circle...
+	// ...so that the pivot point, and focus of the camera is on the centre of our scene.
+	var timer = new Date().getTime() * -0.0003;
+	camera.position.x = (Math.cos( timer ) * focalpoint.radius) + focalpoint.x;
+	camera.position.z = (Math.sin( timer ) * focalpoint.radius) + focalpoint.z;
+	// Set the camera to always point to the current focal point
+	camera.lookAt( { x:focalpoint.x, y:focalpoint.y, z:focalpoint.z } );
+	// Compensate for the angle of the camera's x-rotation
+	if(camera.rotation.x == 0){
+		$('#viewport > canvas').css('background-position', (background.width / 360)*(90 + (camera.rotation.y * 180 / Math.PI))+'px 0');
+	}else{
+		$('#viewport > canvas').css('background-position', (background.width / 360)*(360 - Math.abs(90 + (camera.rotation.y * 180 / Math.PI)))+'px 0');
+	}
+	renderer.render(scene, camera);
+}
+
+function findNearestStellar(starobj){
+	// use a set of very distant coordinates as a starting point
+	var nearest = {x:99999, y:99999, z:99999};
+	// loop through the stars, comparing their distances from starobj
+	for(var i=0; i<stellars.length; i++){
+		if(getObjectDistance(starobj,stellars[i]) < getObjectDistance(starobj,nearest)){
+			// make sure the current star isn't starobj, which has a distance of zero
+			if(stellars[i] != starobj){
+				nearest = stellars[i];
+			}
+		}
+	}
+	return nearest;
+}
+
+// find the exact distance between two points in space (thanks, Pythagoras!)
+function getDistance(xa,ya,za,xb,yb,zb){
+	return Math.sqrt(Math.abs(((xa-xb)*(xa-xb))+((ya-yb)*(ya-yb))+((za-zb)*(za-zb))));
+}
+
+// find the exact distance between two objects (they must contain x, y, and z properties)
+function getObjectDistance(a,b){
+	return getDistance(a.x,a.y,a.z,b.x,b.y,b.z);
+}
+
+var stellars = [
+	// first one is the galactic center, all others are stars
+	{spriteno:0,		x:0,		y:0,		z:0,		scale:1.0,		name:'Galactic Center'},
+	{spriteno:4,		x:-527,		y:-3,		z:771,		scale:0.4,		name:'Spiner'},
+	{spriteno:4,		x:480,		y:3,		z:309,		scale:0.9,		name:'Danoux'},
+	{spriteno:4,		x:899,		y:6,		z:1799,		scale:0.2,		name:'Isac\'s Star'},
+	{spriteno:4,		x:-1492,	y:-3,		z:-1375,	scale:0.3,		name:'Pinderi'},
+	{spriteno:4,		x:-61,		y:-6,		z:-1334,	scale:0.5,		name:'Sininga'},
+	{spriteno:4,		x:-369,		y:-15,		z:-344,		scale:0.3,		name:'Fury'},
+	{spriteno:4,		x:-1206,	y:21,		z:1678,		scale:0.3,		name:'Epiphany'},
+	{spriteno:4,		x:-186,		y:9,		z:1032,		scale:0.8,		name:'Solvus'},
+	{spriteno:4,		x:1662,		y:-36,		z:516,		scale:0.3,		name:'Phileon'},
+	{spriteno:4,		x:-1432,	y:12,		z:1140,		scale:0.3,		name:'Maraq'},
+	{spriteno:4,		x:-555,		y:45,		z:725,		scale:0.4,		name:'Vogt'},
+	{spriteno:4,		x:272,		y:-21,		z:2281,		scale:0.3,		name:'Exodeter'},
+	{spriteno:4,		x:-1046,	y:24,		z:-843,		scale:0.5,		name:'El Diamante'},
+	{spriteno:4,		x:-1220,	y:-15,		z:-749,		scale:0.5,		name:'Canstein'},
+	{spriteno:4,		x:1265,		y:-33,		z:-1414,	scale:0.9,		name:'Lone Titan'},
+	{spriteno:4,		x:-1069,	y:-6,		z:444,		scale:0.3,		name:'Neosanto'},
+	{spriteno:4,		x:-399,		y:-48,		z:1746,		scale:0.4,		name:'Malces'},
+	{spriteno:4,		x:943,		y:-66,		z:-1188,	scale:0.4,		name:'Farant'},
+	{spriteno:4,		x:-1140,	y:-69,		z:-1077,	scale:0.9,		name:'Hirsch'},
+	{spriteno:4,		x:-1420,	y:-66,		z:392,		scale:0.8,		name:'Casmycus'},
+	{spriteno:0,		x:-157,		y:-87,		z:752,		scale:0.5,		name:'Von Hathaway'},
+	{spriteno:0,		x:-1260,	y:126,		z:95,		scale:0.4,		name:'Arvita'},
+	{spriteno:0,		x:-1107,	y:-21,		z:-932,		scale:0.2,		name:'Yango'},
+	{spriteno:0,		x:-1303,	y:33,		z:-201,		scale:0.8,		name:'Trialifer'},
+	{spriteno:0,		x:1372,		y:24,		z:-767,		scale:0.5,		name:'Ive\'s Folly'},
+	{spriteno:0,		x:1230,		y:-48,		z:357,		scale:0.8,		name:'Wellstar'},
+	{spriteno:0,		x:540,		y:21,		z:-875,		scale:0.7,		name:'Revere'},
+	{spriteno:0,		x:-1352,	y:-105,		z:444,		scale:0.4,		name:'Tasix'},
+	{spriteno:0,		x:-399,		y:30,		z:883,		scale:0.4,		name:'Fermion'},
+	{spriteno:0,		x:194,		y:33,		z:1276,		scale:0.7,		name:'Mirvelda'},
+	{spriteno:0,		x:1329,		y:72,		z:-258,		scale:0.4,		name:'Zia'},
+	{spriteno:0,		x:1307,		y:51,		z:285,		scale:0.4,		name:'Bivextor'},
+	{spriteno:0,		x:-235,		y:-126,		z:-1866,	scale:0.6,		name:'Polista'},
+	{spriteno:0,		x:532,		y:99,		z:-285,		scale:0.8,		name:'Eutaris'},
+	{spriteno:0,		x:938,		y:93,		z:1089,		scale:0.6,		name:'Eddington'},
+	{spriteno:0,		x:547,		y:-69,		z:1655,		scale:0.3,		name:'Majel\'s Flame'},
+	{spriteno:0,		x:883,		y:132,		z:-469,		scale:0.2,		name:'Hallefall'},
+	{spriteno:0,		x:1233,		y:-96,		z:-492,		scale:0.4,		name:'Hazella'},
+	{spriteno:0,		x:-1164,	y:12,		z:-730,		scale:0.7,		name:'Virtue'},
+	{spriteno:0,		x:-1212,	y:-33,		z:-38,		scale:0.9,		name:'Carter'},
+	{spriteno:0,		x:605,		y:120,		z:-123,		scale:0.4,		name:'Severax'},
+	{spriteno:0,		x:295,		y:-24,		z:873,		scale:0.6,		name:'Kimikus'},
+	{spriteno:0,		x:1014,		y:-33,		z:-401,		scale:0.3,		name:'Rusope'},
+	{spriteno:0,		x:-299,		y:33,		z:-1387,	scale:0.2,		name:'Dicapristern'},
+	{spriteno:0,		x:823,		y:-99,		z:-990,		scale:0.8,		name:'Martinez'},
+	{spriteno:0,		x:780,		y:-99,		z:-670,		scale:0.6,		name:'Comimus'},
+	{spriteno:0,		x:-1115,	y:9,		z:240,		scale:0.4,		name:'Archifer'},
+	{spriteno:0,		x:767,		y:-63,		z:814,		scale:0.4,		name:'Polsig'},
+	{spriteno:0,		x:816,		y:135,		z:-315,		scale:0.2,		name:'Amelara'},
+	{spriteno:0,		x:-135,		y:-168,		z:-1702,	scale:0.7,		name:'Freeman'},
+	{spriteno:0,		x:153,		y:-9,		z:-1142,	scale:0.5,		name:'Santhermaal'},
+	{spriteno:0,		x:-149,		y:-144,		z:-836,		scale:0.5,		name:'Rudde'},
+	{spriteno:0,		x:532,		y:-192,		z:-243,		scale:0.5,		name:'Theodosius'},
+	{spriteno:0,		x:-1099,	y:-189,		z:28,		scale:0.7,		name:'Optonica'},
+	{spriteno:0,		x:628,		y:-105,		z:-892,		scale:0.7,		name:'Mustyl'},
+	{spriteno:0,		x:556,		y:-129,		z:800,		scale:0.2,		name:'Spooner'},
+	{spriteno:0,		x:1005,		y:30,		z:344,		scale:0.8,		name:'Tandershaw'},
+	{spriteno:0,		x:104,		y:112,		z:1196,		scale:0.8,		name:'Veia'},
+	{spriteno:0,		x:703,		y:-234,		z:408,		scale:0.7,		name:'Fontellis'},
+	{spriteno:1,		x:725,		y:187,		z:-339,		scale:0.6,		name:'Ariadne'},
+	{spriteno:1,		x:-902,		y:198,		z:-436,		scale:0.5,		name:'Periment'},
+	{spriteno:1,		x:688,		y:-12,		z:-1013,	scale:0.7,		name:'Hopkins'},
+	{spriteno:1,		x:-427,		y:204,		z:-1016,	scale:0.2,		name:'Proviene'},
+	{spriteno:1,		x:50,		y:-252,		z:318,		scale:0.5,		name:'Gaiton'},
+	{spriteno:1,		x:-1,		y:-189,		z:-584,		scale:0.6,		name:'Siriax'},
+	{spriteno:1,		x:-472,		y:51,		z:234,		scale:0.7,		name:'Bismarck\'s Star'},
+	{spriteno:1,		x:538,		y:258,		z:710,		scale:0.7,		name:'Damota'},
+	{spriteno:1,		x:-29,		y:-201,		z:-230,		scale:0.5,		name:'Midas'},
+	{spriteno:1,		x:-152,		y:111,		z:-1131,	scale:0.6,		name:'Adamer'},
+	{spriteno:1,		x:804,		y:258,		z:-244,		scale:0.7,		name:'Cassiad'},
+	{spriteno:1,		x:287,		y:-228,		z:-301,		scale:0.2,		name:'Margulis'},
+	{spriteno:1,		x:366,		y:-123,		z:-995,		scale:0.3,		name:'Wong'},
+	{spriteno:1,		x:572,		y:198,		z:-82,		scale:0.8,		name:'Unimalia'},
+	{spriteno:1,		x:601,		y:123,		z:-696,		scale:0.8,		name:'Branson'},
+	{spriteno:1,		x:784,		y:-261,		z:114,		scale:0.5,		name:'Hope'},
+	{spriteno:1,		x:283,		y:60,		z:792,		scale:0.7,		name:'Muta'},
+	{spriteno:1,		x:419,		y:-168,		z:-563,		scale:0.9,		name:'Disano'},
+	{spriteno:1,		x:-265,		y:204,		z:464,		scale:0.8,		name:'Frakeska'},
+	{spriteno:1,		x:624,		y:-162,		z:-504,		scale:0.4,		name:'Nguyen'},
+	{spriteno:1,		x:-141,		y:198,		z:-695,		scale:0.4,		name:'Felbright'},
+	{spriteno:1,		x:158,		y:-213,		z:693,		scale:0.6,		name:'Bastiat'},
+	{spriteno:1,		x:87,		y:0,		z:683,		scale:0.7,		name:'Cain\'s Halo'},
+	{spriteno:1,		x:385,		y:39,		z:-143,		scale:0.6,		name:'Rucine'},
+	{spriteno:1,		x:-664,		y:-168,		z:-101,		scale:0.4,		name:'Antilotona'},
+	{spriteno:1,		x:-513,		y:81,		z:-181,		scale:0.8,		name:'Tamian'},
+	{spriteno:1,		x:273,		y:-171,		z:-227,		scale:0.3,		name:'Patience'},
+	{spriteno:1,		x:345,		y:285,		z:696,		scale:0.4,		name:'Septarium'},
+	{spriteno:1,		x:-590,		y:-363,		z:-287,		scale:0.9,		name:'Allens'},
+	{spriteno:1,		x:-536,		y:-369,		z:345,		scale:0.2,		name:'Vexine'},
+	{spriteno:1,		x:231,		y:174,		z:560,		scale:0.3,		name:'Mareus'},
+	{spriteno:1,		x:-159,		y:279,		z:-562,		scale:0.9,		name:'Gaussica'},
+	{spriteno:1,		x:-76,		y:-246,		z:-356,		scale:0.5,		name:'Ondal'},
+	{spriteno:1,		x:186,		y:-222,		z:-368,		scale:0.4,		name:'Asantis'},
+	{spriteno:1,		x:-161,		y:120,		z:-65,		scale:0.3,		name:'Eulerio'},
+	{spriteno:1,		x:-386,		y:96,		z:29,		scale:0.6,		name:'Bardeen'},
+	{spriteno:1,		x:17,		y:-267,		z:-290,		scale:0.4,		name:'Dolodro'},
+	{spriteno:1,		x:-427,		y:-165,		z:222,		scale:0.3,		name:'Chasmos'},
+	{spriteno:1,		x:-153,		y:-372,		z:396,		scale:0.7,		name:'Gelmann'},
+	{spriteno:1,		x:104,		y:18,		z:-151,		scale:0.6,		name:'Sanserga'},
+	{spriteno:1,		x:368,		y:378,		z:138,		scale:0.9,		name:'Mettig'},
+	{spriteno:1,		x:-79,		y:147,		z:-442,		scale:0.8,		name:'Kekule'},
+	{spriteno:1,		x:-311,		y:-387,		z:47,		scale:0.3,		name:'Vulierre'},
+	{spriteno:1,		x:282,		y:-36,		z:-124,		scale:1.0,		name:'Gordo'},
+	{spriteno:1,		x:-375,		y:-30,		z:555,		scale:0.6,		name:'Alerex'},
+	{spriteno:1,		x:225,		y:210,		z:750,		scale:0.4,		name:'Tizon'},
+	{spriteno:1,		x:540,		y:330,		z:840,		scale:0.5,		name:'Neschl'},
+	{spriteno:1,		x:900,		y:-60,		z:855,		scale:0.8,		name:'Gariesta'},
+	{spriteno:1,		x:1200,		y:-450,		z:765,		scale:0.6,		name:'Dorn'},
+	{spriteno:1,		x:1485,		y:0,		z:630,		scale:0.6,		name:'Lysenko\'s Star'},
+	{spriteno:1,		x:1740,		y:-150,		z:360,		scale:0.4,		name:'Sedden'},
+	{spriteno:1,		x:1905,		y:180,		z:90,		scale:0.3,		name:'Cameroni'},
+	{spriteno:1,		x:2025,		y:-30,		z:-195,		scale:0.3,		name:'Apus'},
+	{spriteno:1,		x:-555,		y:-60,		z:30,		scale:0.8,		name:'Taardix'},
+	{spriteno:1,		x:-750,		y:510,		z:285,		scale:0.2,		name:'Sympeg'},
+	{spriteno:1,		x:-840,		y:90,		z:600,		scale:0.2,		name:'Sacron'},
+	{spriteno:1,		x:-855,		y:-180,		z:960,		scale:0.5,		name:'Astakeix'},
+	{spriteno:1,		x:-765,		y:30,		z:1275,		scale:0.4,		name:'Hustentra'},
+	{spriteno:2,		x:-630,		y:-600,		z:1545,		scale:0.2,		name:'Sotes'},
+	{spriteno:2,		x:-360,		y:-120,		z:1800,		scale:0.4,		name:'Donnes'},
+	{spriteno:2,		x:-90,		y:540,		z:1965,		scale:0.5,		name:'Soloma'},
+	{spriteno:2,		x:195,		y:150,		z:2085,		scale:0.5,		name:'Spire'},
+	{spriteno:2,		x:-30,		y:-270,		z:-495,		scale:0.2,		name:'Miniocho'},
+	{spriteno:2,		x:-285,		y:300,		z:-690,		scale:0.3,		name:'Rovia'},
+	{spriteno:2,		x:-600,		y:-540,		z:-780,		scale:0.8,		name:'Evanis'},
+	{spriteno:2,		x:-960,		y:120,		z:-795,		scale:0.3,		name:'Yuke'},
+	{spriteno:2,		x:-1260,	y:-420,		z:-705,		scale:0.8,		name:'Arc-Quason'},
+	{spriteno:2,		x:-1545,	y:-540,		z:-570,		scale:0.6,		name:'Djambe'},
+	{spriteno:2,		x:-1350,	y:30,		z:-480,		scale:0.2,		name:'Quinnel'},
+	{spriteno:2,		x:-1965,	y:-210,		z:-30,		scale:0.3,		name:'Mullan'},
+	{spriteno:2,		x:-2175,	y:-20,		z:330,		scale:0.6,		name:'Gynech'},
+	{spriteno:3,		x:495,		y:-570,		z:30,		scale:0.4,		name:'Blackstar'},
+	{spriteno:2,		x:690,		y:300,		z:-225,		scale:0.2,		name:'Yarph'},
+	{spriteno:2,		x:780,		y:-90,		z:-540,		scale:0.5,		name:'Cerros'},
+	{spriteno:2,		x:795,		y:-30,		z:-900,		scale:0.4,		name:'Butler'},
+	{spriteno:2,		x:705,		y:150,		z:-1200,	scale:0.6,		name:'Marzipan\'s Run'},
+	{spriteno:2,		x:570,		y:-600,		z:-1485,	scale:0.3,		name:'Dalton'},
+	{spriteno:2,		x:300,		y:360,		z:-1740,	scale:0.8,		name:'Romanov'},
+	{spriteno:2,		x:30,		y:-120,		z:-1905,	scale:0.5,		name:'Joya'},
+	{spriteno:2,		x:-255,		y:-510,		z:-2025,	scale:0.4,		name:'Morning'},
+	{spriteno:2,		x:0,		y:30,		z:525,		scale:0.8,		name:'Vulgris'},
+	{spriteno:2,		x:255,		y:-210,		z:720,		scale:0.5,		name:'Hades'},
+	{spriteno:2,		x:570,		y:-330,		z:810,		scale:0.2,		name:'Alise'},
+	{spriteno:2,		x:930,		y:60,		z:825,		scale:0.2,		name:'Red Point'},
+	{spriteno:2,		x:1230,		y:450,		z:735,		scale:0.3,		name:'Malevolence'},
+	{spriteno:2,		x:1535,		y:0,		z:600,		scale:0.3,		name:'Burton'},
+	{spriteno:2,		x:1770,		y:150,		z:330,		scale:0.4,		name:'Keene'},
+	{spriteno:2,		x:1935,		y:-180,		z:60,		scale:0.4,		name:'Reynolds'},
+	{spriteno:2,		x:2055,		y:30,		z:-245,		scale:0.6,		name:'Legacy'},
+	{spriteno:2,		x:-1230,	y:60,		z:60,		scale:0.6,		name:'Battalion'},
+	{spriteno:2,		x:-720,		y:-510,		z:255,		scale:0.4,		name:'Heisenberg'},
+	{spriteno:2,		x:-810,		y:-90,		z:570,		scale:0.4,		name:'Eve'},
+	{spriteno:2,		x:-825,		y:180,		z:930,		scale:0.8,		name:'Ochrin'},
+	{spriteno:2,		x:-1185,	y:-330,		z:780,		scale:0.5,		name:'Regal'},
+	{spriteno:2,		x:-600,		y:600,		z:1515,		scale:0.2,		name:'Guela'},
+	{spriteno:2,		x:-330,		y:120,		z:1770,		scale:0.2,		name:'Chisolm'},
+	{spriteno:2,		x:-60,		y:-540,		z:1935,		scale:0.3,		name:'Lawless'},
+	{spriteno:2,		x:225,		y:-150,		z:2055,		scale:0.6,		name:'Lexoma'},
+	{spriteno:2,		x:0,		y:270,		z:-525,		scale:0.4,		name:'Sanger'},
+	{spriteno:2,		x:-255,		y:-300,		z:-720,		scale:0.8,		name:'Braun\'s Beacon'},
+	{spriteno:2,		x:-570,		y:60,		z:-810,		scale:0.4,		name:'Wayward'},
+	{spriteno:2,		x:-930,		y:-120,		z:-825,		scale:0.3,		name:'Mephistopheles'},
+	{spriteno:2,		x:-1230,	y:420,		z:-735,		scale:0.6,		name:'Rampart'},
+	{spriteno:2,		x:-1515,	y:540,		z:-600,		scale:0.3,		name:'Christo'},
+	{spriteno:2,		x:-1770,	y:-30,		z:-330,		scale:0.3,		name:'Salia'},
+	{spriteno:2,		x:-1935,	y:210,		z:-60,		scale:0.5,		name:'Jenkins'},
+	{spriteno:2,		x:-2055,	y:30,		z:225,		scale:0.2,		name:'Sikh'},
+	{spriteno:2,		x:525,		y:570,		z:0,		scale:0.2,		name:'Propilionis'},
+	{spriteno:2,		x:720,		y:-300,		z:-255,		scale:0.8,		name:'Skeldon'},
+	{spriteno:2,		x:810,		y:90,		z:-570,		scale:0.6,		name:'Alcyon'},
+	{spriteno:2,		x:75,		y:330,		z:-930,		scale:0.8,		name:'Ulalia'},
+	{spriteno:2,		x:735,		y:-150,		z:-1230,	scale:0.8,		name:'Xiang'},
+	{spriteno:2,		x:600,		y:600,		z:-1515,	scale:0.4,		name:'Parthenon'},
+	{spriteno:2,		x:330,		y:-360,		z:-1770,	scale:0.4,		name:'Daedalus'},
+	{spriteno:2,		x:60,		y:120,		z:-1935,	scale:0.2,		name:'Scarab'},
+	{spriteno:2,		x:-225,		y:510,		z:-2055,	scale:0.3,		name:'Hyde'}
+];
+
+for(var i=1;i<stellars.length;i++){
+	addStellar(stellars[i]);
+	$('#starselect').append('<option value="'+i+'">'+(stellars[i].name?stellars[i].name:'Stellar #'+i)+'</option>\n');
+}
+
+animate();
+</script>
+</body>
+</html>
